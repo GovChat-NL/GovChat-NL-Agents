@@ -21,10 +21,12 @@ n8n/
 
 `GovChat-NL-LibreChat` importeert workflows bij opstart via GitHub Raw URLs:
 
-- Basis-URL: `https://raw.githubusercontent.com/GovChat-NL/GovChat-NL-Agents/main/n8n/workflows`
-- Bestandenlijst: `versimpelaar-litellm.json,orchestrator-litellm.json`
+- Env var `AGENTS_RAW_BASE_URL`: basis-URL (default: `https://raw.githubusercontent.com/GovChat-NL/GovChat-NL-Agents/main/n8n/workflows`)
+- Env var `AGENTS_WORKFLOW_FILES`: bestandenlijst (default: `versimpelaar-litellm.json,orchestrator-litellm.json`)
 
 Hierdoor kan de LibreChat-stack starten **zonder** lokale clone van deze repository.
+
+Deze variabelen configureer je in [`GovChat-NL-LibreChat/.env`](../GovChat-NL-LibreChat/.env.example:49) en ze worden gebruikt door [`n8n-bootstrap`](../GovChat-NL-LibreChat/docker-compose.yml:415).
 
 ## Hoe de orchestrator-keten werkt
 
