@@ -1,0 +1,125 @@
+{
+  "id": "govchat-image-generator-litellm",
+  "name": "GovChat Image Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "image-generator",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "WebhookImageGenerator",
+      "name": "Webhook Image Generator",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -980,
+        220
+      ],
+      "webhookId": "govchat-image-generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst headers = $json.headers || {};\n\nconst headerToken = String(headers['x-govchat-token'] || headers['X-Govchat-Token'] || '').trim();\nconst authHeader = String(headers.authorization || headers.Authorization || '').trim();\nconst bearerToken = authHeader.toLowerCase().startsWith('bearer ')\n  ? authHeader.slice(7).trim()\n  : '';\nconst suppliedToken = headerToken || bearerToken;\nconst expectedToken = String($env.N8N_WEBHOOK_TOKEN || '').trim();\n\nif (!expectedToken) throw new Error('Server misconfiguratie: N8N_WEBHOOK_TOKEN ontbreekt');\nif (!suppliedToken || suppliedToken !== expectedToken) throw new Error('Unauthorized webhook token');\n\nconst prompt = String(body.prompt || body.text || body.input || '').trim();\nif (!prompt) throw new Error('Afbeelding-tool vereist een prompt');\n\nconst size = String(body.size || '1024x1024').trim();\nconst quality = String(body.quality || 'standard').trim();\nconst enabled = String($env.N8N_ENABLE_IMAGE_TOOL || 'false').toLowerCase() === 'true';\nif (!enabled) throw new Error('Afbeelding-generatie staat uit (N8N_ENABLE_IMAGE_TOOL=false)');\n\nconst baseRaw = String($env.N8N_LITELLM_IMAGE_BASE_URL || $env.LITELLM_URL || 'http://litellm:4000').trim();\nconst apiBase = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;\nconst apiKey = String($env.N8N_LITELLM_IMAGE_API_KEY || $env.LITELLM_API_KEY || '').trim();\nconst model = String($env.N8N_LITELLM_IMAGE_MODEL || 'gpt-image-1').trim();\nconst apiVersion = String($env.N8N_LITELLM_IMAGE_API_VERSION || '2024-02-01').trim();\nif (!apiKey) throw new Error('LITELLM_API_KEY ontbreekt');\n\nconst isAzureDeploymentPath = /\\/openai\\/deployments\\//i.test(apiBase);\nconst generateUrl = isAzureDeploymentPath\n  ? `${apiBase}/images/generations?api-version=${encodeURIComponent(apiVersion)}`\n  : `${apiBase}/v1/images/generations`;\n\nconst requestBody = isAzureDeploymentPath\n  ? { prompt, size, quality }\n  : { model, prompt, size, quality };\n\nreturn [{\n  json: {\n    prompt,\n    size,\n    quality,\n    model,\n    apiBase,\n    apiKey,\n    isAzureDeploymentPath,\n    generateUrl,\n    requestBody\n  }\n}];"
+      },
+      "id": "PrepareImageRequest",
+      "name": "Prepare Image Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.generateUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ $json.isAzureDeploymentPath ? '' : ('Bearer ' + $json.apiKey) }}"
+            },
+            {
+              "name": "api-key",
+              "value": "={{ $json.isAzureDeploymentPath ? $json.apiKey : '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "CallImageApi",
+      "name": "Call Images API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -480,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const arr = Array.isArray($json.data) ? $json.data : [];\nconst first = arr[0] || {};\nlet url = String(first.url || '').trim();\nif (!url && first.b64_json) {\n  url = 'data:image/png;base64,' + String(first.b64_json);\n}\nif (!url) throw new Error('Geen afbeelding URL/b64 ontvangen van image API');\nconst markdown = `![gegenereerde afbeelding](${url})`;\nreturn [{ json: { response: `Afbeelding gegenereerd. URL: ${url} | Markdown: ${markdown}`, image_url: url } }];"
+      },
+      "id": "BuildImageResponse",
+      "name": "Build Image Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Image Generator": {
+      "main": [
+        [
+          {
+            "node": "Prepare Image Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Image Request": {
+      "main": [
+        [
+          {
+            "node": "Call Images API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Images API": {
+      "main": [
+        [
+          {
+            "node": "Build Image Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

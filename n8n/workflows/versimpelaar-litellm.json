@@ -57,7 +57,7 @@
         "model": {
           "__rl": true,
           "mode": "list",
-          "value": "gpt-4o-mini"
+          "value": "gpt-5.4"
         },
         "options": {
           "baseURL": "={{ (String($env.LITELLM_URL || 'http://litellm:4000').replace(/\\/$/, '')) + '/v1' }}"

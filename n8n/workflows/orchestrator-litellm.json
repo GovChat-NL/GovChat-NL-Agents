@@ -21,24 +21,11 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body || {};\nconst headers = $json.headers || {};\n\nconst headerToken = String(headers['x-govchat-token'] || headers['X-Govchat-Token'] || '').trim();\nconst authHeader = String(headers.authorization || headers.Authorization || '').trim();\nconst bearerToken = authHeader.toLowerCase().startsWith('bearer ')\n  ? authHeader.slice(7).trim()\n  : '';\nconst suppliedToken = headerToken || bearerToken;\nconst expectedToken = String($env.N8N_WEBHOOK_TOKEN || '').trim();\n\nif (!expectedToken) throw new Error('Server misconfiguratie: N8N_WEBHOOK_TOKEN ontbreekt');\nif (!suppliedToken || suppliedToken !== expectedToken) throw new Error('Unauthorized webhook token');\n\nfunction normalizeContent(content) {\n  if (typeof content === 'string') return content.trim();\n  if (Array.isArray(content)) {\n    return content\n      .map((part) => {\n        if (!part) return '';\n        if (typeof part === 'string') return part;\n        if (part.type === 'text') return String(part.text || '');\n        return '';\n      })\n      .join(' ')\n      .replace(/\\s+/g, ' ')\n      .trim();\n  }\n  return '';\n}\n\nfunction buildConversation(messages) {\n  if (!Array.isArray(messages) || messages.length === 0) return '';\n\n  const lines = messages\n    .map((m) => {\n      const role = String(m?.role || 'user').toLowerCase();\n      const content = normalizeContent(m?.content);\n      if (!content) return '';\n      return `[${role}] ${content}`;\n    })\n    .filter(Boolean);\n\n  if (!lines.length) return '';\n\n  return [\n    'Gebruik onderstaande volledige chatgeschiedenis als context:',\n    '',\n    ...lines,\n  ].join('\\n');\n}\n\nconst directText = String(body.text || body.prompt || body.input || '').trim();\nconst historyText = buildConversation(body.messages);\nconst inputText = directText || historyText;\n\nif (!inputText) throw new Error('Geen invoertekst gevonden (verwacht text/prompt/input of OpenAI messages)');\n\nreturn [{\n  json: {\n    text: inputText,\n    requestModel: String(body.model || 'govchat-orchestrator'),\n    hasHistory: Boolean(historyText),\n  },\n}];"
-      },
-      "id": "PrepareInput",
-      "name": "Prepare Input",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -820,
-        240
-      ]
-    },
-    {
-      "parameters": {
         "promptType": "define",
-        "text": "={{ $json.text }}",
+        "text": "={{ (Array.isArray($json.body?.messages) && $json.body.messages.length) ? $json.body.messages.map((m) => { const role = String(m?.role || 'user'); const content = Array.isArray(m?.content) ? m.content.filter((p) => p && p.type === 'text').map((p) => String(p.text || '')).join(' ') : String(m?.content || ''); return `[${role}] ${content}`.trim(); }).filter(Boolean).join('\\n') : String($json.body?.text || $json.body?.prompt || $json.body?.input || '') }}",
         "hasOutputParser": false,
         "options": {
-          "systemMessage": "Je bent de GovChat Orchestrator voor overheidscommunicatie. Gebruik de beschikbare tool wanneer de gebruiker vraagt om versimpelen naar B1 (of vergelijkbare verzoeken zoals vereenvoudigen/herformuleren op taalniveau). Gebruik voor overige vragen je eigen redeneervermogen en geef een direct antwoord. Houd antwoorden feitelijk en voeg geen ongefundeerde informatie toe.",
+          "systemMessage": "Je bent de GovChat Orchestrator voor overheidscommunicatie. Gebruik de beschikbare tool wanneer de gebruiker vraagt om versimpelen naar B1 (of vergelijkbare verzoeken zoals vereenvoudigen/herformuleren op taalniveau). Gebruik de afbeelding-tool wanneer de gebruiker expliciet vraagt om een afbeelding/generatie van beeldmateriaal. Gebruik voor overige vragen je eigen redeneervermogen en geef een direct antwoord. Houd antwoorden feitelijk en voeg geen ongefundeerde informatie toe.",
           "enableStreaming": true,
           "maxIterations": 8
         }
@@ -57,7 +44,7 @@
         "model": {
           "__rl": true,
           "mode": "list",
-          "value": "gpt-4o-mini"
+          "value": "gpt-5.4"
         },
         "options": {
           "baseURL": "={{ (String($env.LITELLM_URL || 'http://litellm:4000').replace(/\\/$/, '')) + '/v1' }}"
@@ -92,21 +79,25 @@
         -340,
         80
       ]
+    },
+    {
+      "parameters": {
+        "description": "Gebruik deze tool ALLEEN als de gebruiker expliciet om een afbeelding vraagt. Input bevat minimaal een prompt. Optioneel: size (bijv. 1024x1024), quality (standard|hd).",
+        "source": "parameter",
+        "workflowJson": "={{ JSON.stringify({id:'inline-image-tool',name:'Inline Image Tool Caller',nodes:[{id:'execTrigger',name:'When Executed by Another Workflow',type:'n8n-nodes-base.executeWorkflowTrigger',typeVersion:1,position:[-520,120],parameters:{}},{id:'imgCode1',name:'Prepare Tool Request',type:'n8n-nodes-base.code',typeVersion:2,position:[-280,120],parameters:{jsCode:\"const input=$json||{}; const prompt=String(input.prompt||input.text||input.input||'').trim(); if(!prompt) throw new Error('Afbeelding-tool vereist een prompt'); const token=String($env.N8N_WEBHOOK_TOKEN||'').trim(); if(!token) throw new Error('N8N_WEBHOOK_TOKEN ontbreekt'); const size=String(input.size||'1024x1024').trim(); const quality=String(input.quality||'standard').trim(); return [{json:{prompt,size,quality,token}}];\"}},{id:'imgHttp',name:'Call Image Generator Workflow',type:'n8n-nodes-base.httpRequest',typeVersion:4.2,position:[-20,120],parameters:{method:'POST',url:'=http://n8n:5678/webhook/image-generator',sendHeaders:true,headerParameters:{parameters:[{name:'Content-Type',value:'application/json'},{name:'x-govchat-token',value:'={{$json.token}}'}]},sendBody:true,specifyBody:'json',jsonBody:\"={{ JSON.stringify({ prompt: $json.prompt, size: $json.size, quality: $json.quality }) }}\",options:{timeout:180000}}},{id:'imgCode2',name:'Build Tool Response',type:'n8n-nodes-base.code',typeVersion:2,position:[240,120],parameters:{jsCode:\"const url=String($json.image_url||'').trim(); const response=String($json.response||'').trim(); if(!url&&!response) throw new Error('Image workflow gaf geen bruikbare output'); return [{json:{response:response||('Afbeelding gegenereerd. URL: '+url), image_url:url}}];\"}}],connections:{'When Executed by Another Workflow':{main:[[{node:'Prepare Tool Request',type:'main',index:0}]]},'Prepare Tool Request':{main:[[{node:'Call Image Generator Workflow',type:'main',index:0}]]},'Call Image Generator Workflow':{main:[[{node:'Build Tool Response',type:'main',index:0}]]}}}) }}"
+      },
+      "id": "ToolImageGeneration",
+      "name": "image_generation_tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -340,
+        340
+      ]
     }
   ],
   "connections": {
     "Webhook Orchestrator": {
-      "main": [
-        [
-          {
-            "node": "Prepare Input",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Input": {
       "main": [
         [
           {
@@ -129,6 +120,17 @@
       ]
     },
     "versimpelaar_b1_tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "image_generation_tool": {
       "ai_tool": [
         [
           {
