@@ -1,5 +1,16 @@
 # GovChat-NL-Agents
 
+> [!WARNING]
+> **Status: niet productierijp / niet gegarandeerd werkend.**
+> Deze workflows worden gedeeld als **inspiratie en referentie** voor leveranciers en mede-overheden.
+> Niet bedoeld als direct inzetbare productieconfiguratie zonder aanvullende validatie, security checks en beheerafspraken.
+
+## Publicatiedoel
+
+- Voorbeeld van orchestrator-first workflowontwerp.
+- Input voor leveranciersdialoog en gezamenlijke doorontwikkeling.
+- Transparantie over ontwerpkeuzes, niet over gegarandeerde productiegeschiktheid.
+
 Centrale repository voor GovChat-NL n8n-agentworkflows.
 
 ## Scope
