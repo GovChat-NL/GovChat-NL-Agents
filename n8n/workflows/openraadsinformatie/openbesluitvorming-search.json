@@ -1,0 +1,444 @@
+[
+  {
+    "id": "govchat-ob-search",
+    "name": "Open Besluitvorming - Zoeken",
+    "description": "Generic retrieval sub-workflow for the GovChat orchestrator. Searches an Open Besluitvorming Qdrant collection and reports a deterministic bootstrap state when the collection has not yet been populated.",
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "saveExecutionProgress": true,
+      "saveManualExecutions": true,
+      "availableInMCP": false
+    },
+    "nodes": [
+      {
+        "parameters": {
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "query"
+              },
+              {
+                "name": "source_key"
+              },
+              {
+                "name": "date_from"
+              },
+              {
+                "name": "date_to"
+              },
+              {
+                "name": "document_type"
+              },
+              {
+                "name": "document_classification"
+              },
+              {
+                "name": "supplier"
+              },
+              {
+                "name": "meeting_id"
+              },
+              {
+                "name": "document_id"
+              },
+              {
+                "name": "include_content",
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "id": "ori-search-trigger",
+        "name": "1. Receive Search Request",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          -1180,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.first()?.json || {};\nconst clean = (value, fallback = '') => String(value ?? fallback).trim();\nconst list = (value) => Array.from(new Set((Array.isArray(value) ? value : String(value ?? '').split(',')).map(v => clean(v)).filter(Boolean)));\nconst isoDate = (value, name) => {\n  const raw = clean(value);\n  if (!raw) return null;\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(raw) || Number.isNaN(Date.parse(`${raw}T00:00:00Z`))) throw new Error(`${name} must use YYYY-MM-DD.`);\n  return raw;\n};\nconst enabled = String($env.N8N_ENABLE_OPENBESLUITVORMING || 'true').trim().toLowerCase() !== 'false';\nconst query = clean(input.query || input.question || input.input || input.text);\nconst dateFrom = isoDate(input.date_from, 'date_from');\nconst dateTo = isoDate(input.date_to, 'date_to');\nif (dateFrom && dateTo && dateFrom > dateTo) throw new Error('date_from mag niet na date_to liggen.');\nconst dateOnly = !query && Boolean(dateFrom || dateTo);\nif (!query && !dateOnly) throw new Error('Geef een inhoudelijk onderwerp in query, of gebruik date_from/date_to voor een datumoverzicht zonder onderwerp.');\nconst requestedSources = list(input.source_keys || input.source_key || input.organization);\nconst defaultSources = list($env.OPENBESLUITVORMING_DEFAULT_SOURCES || $env.OPENBESLUITVORMING_DEFAULT_SOURCE || 'provincie_limburg');\nconst sourceKeys = requestedSources.length ? requestedSources : defaultSources;\nreturn [{ json: {\n  query: query || null,\n  enabled,\n  date_only: dateOnly,\n  source_keys: sourceKeys,\n  // Retrieval breadth is deliberately fixed. The adaptive relevance gate below decides how many documents are returned.\n  top_k: 100,\n  candidate_limit: 500,\n  include_content: input.include_content === true,\n  date_from: dateFrom,\n  date_to: dateTo,\n  suppliers: list(input.suppliers || input.supplier),\n  entity_types: list(input.entity_types || input.entity_type || input.document_type || 'Document').map(value => value.toLowerCase()).map(value => value === 'document' ? 'Document' : value === 'meeting' ? 'Meeting' : value === 'motion' ? 'Motion' : value === 'recording' ? 'Recording' : value),\n  document_classifications: list(input.document_classifications || input.document_classification),\n  meeting_ids: list(input.meeting_ids || input.meeting_id),\n  document_ids: list(input.document_ids || input.document_id),\n  collection: clean(input.collection || $env.OPENBESLUITVORMING_COLLECTION, 'openraadsinformatie_v1'),\n  qdrant_base: clean(input.qdrant_base || $env.OPENBESLUITVORMING_QDRANT_URL, 'http://qdrant:6333').replace(/\\/$/, ''),\n  litellm_base: clean(input.litellm_base || $env.LITELLM_URL, 'http://litellm:4000').replace(/\\/$/, ''),\n  embedding_model: clean(input.embedding_model || $env.OPENBESLUITVORMING_EMBEDDING_MODEL, 'govchat-embedding'),\n  default_artifact_source: clean($env.OPENBESLUITVORMING_DEFAULT_SOURCE, 'provincie_limburg')\n} }];"
+        },
+        "id": "ori-search-normalize",
+        "name": "2. Validate Search Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -960,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.qdrant_base + '/collections/' + encodeURIComponent($json.collection) }}",
+          "options": {
+            "timeout": 10000,
+            "response": {
+              "response": {
+                "fullResponse": true
+              }
+            }
+          }
+        },
+        "id": "ori-search-read-collection",
+        "name": "3. Inspect Retrieval Collection",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -720,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const request = $('2. Validate Search Request').first().json;\nconst response = $input.first()?.json || {};\nconst body = response.body || response.data || response;\nconst status = Number(response.statusCode || response.status || response.error?.httpCode || response.error?.statusCode || 0);\nconst vectors = body?.result?.config?.params?.vectors;\nconst points = Number(body?.result?.points_count ?? body?.result?.vectors_count ?? 0);\nconst missing = status === 404 || response.error || !vectors;\nif (!missing && (Number(vectors.size) !== 3072 || vectors.distance !== 'Cosine')) {\n  throw new Error(`Qdrant schema mismatch for ${request.collection}; expected 3072/Cosine.`);\n}\nreturn [{ json: { ...request, collection_exists: !missing, points_count: missing ? 0 : points, setup_required: missing || points < 1 } }];"
+        },
+        "id": "ori-search-collection-state",
+        "name": "4. Determine Bootstrap State",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -480,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.setup_required }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "ori-search-setup-needed",
+        "name": "5. Default Artifact Required?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -240,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json;\nreturn [{ json: {\n  status: 'bootstrap_required',\n  query: input.query,\n  results: [],\n  citations: [],\n  bootstrap: {\n    required: true,\n    default_artifact: { source_key: input.default_artifact_source, collection: input.collection },\n    workflow_id: 'govchat-ob-ingest-runner',\n    action: 'Run the default artifact bootstrap workflow once; it creates the collection when missing and ingests the first durable page for the configured source.'\n  },\n  message: `Open Besluitvorming is nog niet beschikbaar. De standaardbron ${input.default_artifact_source} moet eerst worden ingeladen.`\n} }];"
+        },
+        "id": "ori-search-bootstrap-response",
+        "name": "6a. Return Bootstrap Instruction",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          0,
+          -120
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.litellm_base + '/embeddings' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.LITELLM_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: $json.embedding_model, input: [$json.query] }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "ori-search-embed",
+        "name": "6b. Embed Search Query",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          0,
+          120
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const request = $('4. Determine Bootstrap State').first().json;\nconst sourceKeys = request.source_keys;\nconst must = [];\nconst any = (key, values) => { if (Array.isArray(values) && values.length) must.push({ key, match: { any: values } }); };\nany('supplier', request.suppliers);\nany('entity_type', request.entity_types);\nany('classification', request.document_classifications);\nany('meeting_id', request.meeting_ids);\nany('document_id', request.document_ids);\nif (request.date_from || request.date_to) {\n  const range = {};\n  if (request.date_from) range.gte = `${request.date_from}T00:00:00Z`;\n  if (request.date_to) range.lte = `${request.date_to}T23:59:59Z`;\n  must.push({ key: 'date', range });\n}\nconst filter = {};\nif (sourceKeys.length) filter.min_should = { conditions: sourceKeys.map(source_key => ({ key: 'source_key', match: { value: source_key } })), min_count: 1 };\nif (must.length) filter.must = must;\nif (request.date_only) return [{ json: { ...request, qdrant_filter: Object.keys(filter).length ? filter : undefined } }];\nconst embedding = $input.first()?.json?.data?.[0]?.embedding;\nif (!Array.isArray(embedding) || embedding.length !== 3072) throw new Error('Embedding service returned no compatible 3072-dimensional vector.');\nreturn [{ json: { ...request, embedding, qdrant_filter: Object.keys(filter).length ? filter : undefined } }];"
+        },
+        "id": "ori-search-build-query",
+        "name": "7. Build Filtered Vector Query",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          240,
+          120
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.qdrant_base + '/collections/' + encodeURIComponent($json.collection) + ($json.date_only ? '/points/scroll' : '/points/query') }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.date_only ? JSON.stringify({ filter: $json.qdrant_filter, limit: 101, with_payload: true, with_vector: false }) : JSON.stringify({ query: $json.embedding, filter: $json.qdrant_filter, limit: $json.candidate_limit, with_payload: true, with_vector: false }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "ori-search-qdrant",
+        "name": "8. Search Open Besluitvorming",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          480,
+          120
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const request = $('7. Build Filtered Vector Query').first().json;\nconst response = $input.first()?.json || {};\nconst raw = response.result?.points || response.points || response.result || [];\nconst received = Array.isArray(raw) ? raw : [];\nconst uuid = (value) => String(value || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] || null;\nconst buildPublicUrl = (payload, pointId) => {\n  if (payload.public_url) return String(payload.public_url);\n  const nested = payload.source_payload || {};\n  if (nested.public_url) return String(nested.public_url);\n  const meetingId = uuid(payload.meeting_id || nested.meeting_id || nested.agenda_id);\n  const documentId = uuid(payload.document_id || nested.document_id || payload.source_id || pointId);\n  const configuredBase = String(payload.public_base_url || nested.public_base_url || nested.portal_base_url || '').replace(/\\/$/, '');\n  const sourceBase = payload.source_key === 'provincie_limburg' ? 'https://limburg.bestuurlijkeinformatie.nl' : '';\n  const base = configuredBase || sourceBase;\n  return base && meetingId && documentId ? `${base}/Agenda/Document/${meetingId}?documentId=${documentId}` : null;\n};\nconst toResult = (point, index) => {\n  const payload = point.payload || {};\n  const content = String(payload.content_preview || payload.preview || payload.inhoud || payload.text || payload.tekst || payload.markdown_text || '');\n  return { rank: index + 1, relevance_score: point.score == null ? null : Number(point.score), title: String(payload.title || payload.titel || payload.file_name || payload.bestandsnaam || 'Naamloos document'), date: payload.date || payload.datum || payload.datum_weergave || null, source_key: payload.source_key || payload.organization || null, supplier: payload.supplier || payload.source_payload?.supplier || null, classification: payload.classification || payload.source_payload?.classification || [], meeting_id: uuid(payload.meeting_id || payload.source_payload?.meeting_id), document_id: uuid(payload.document_id || payload.source_payload?.document_id || payload.source_id || point.id), public_url: buildPublicUrl(payload, point.id), excerpt: content.slice(0, 1200), ...(request.include_content ? { content } : {}) };\n};\nif (request.date_only) {\n  if (received.length > 100) return [{ json: { status: 'topic_required', query: null, results: [], citations: [], retrieval: { strategy: 'date_only_scroll', matching_documents_at_least: received.length, safe_document_limit: 100, returned_documents: 0 }, message: 'Deze datumselectie bevat meer dan 100 documenten. Zonder onderwerp kan ik deze set niet betrouwbaar volledig analyseren. Voeg een inhoudelijk onderwerp toe aan query of maak de datumperiode kleiner.' } }];\n  const chronological = received.slice().sort((a, b) => String(a.payload?.date || '').localeCompare(String(b.payload?.date || '')));\n  const results = chronological.map(toResult);\n  const citations = results.filter(item => item.public_url || item.document_id).map(item => ({ title: item.title, url: item.public_url, meeting_id: item.meeting_id, document_id: item.document_id, source_key: item.source_key }));\n  return [{ json: { status: 'ok', query: null, collection: request.collection, source_keys: request.source_keys, results, citations, retrieval: { strategy: 'date_only_scroll', returned_documents: results.length, safe_document_limit: 100, date_from: request.date_from, date_to: request.date_to }, bootstrap: { required: false }, message: `Found all ${results.length} documents matching this date selection; results are chronological.` } }];\n}\nconst points = received.slice().sort((a, b) => Number(b.score || 0) - Number(a.score || 0));\nconst topScore = Number(points[0]?.score || 0);\nconst absoluteFloor = 0.12;\nconst relativeFloor = topScore > 0 ? topScore * 0.58 : absoluteFloor;\nconst relevanceFloor = Math.max(absoluteFloor, relativeFloor);\nconst retained = points.filter((point) => Number(point.score || 0) >= relevanceFloor).slice(0, request.top_k);\nconst results = retained.map(toResult);\nconst citations = results.filter(item => item.public_url || item.document_id).map(item => ({ title: item.title, url: item.public_url, meeting_id: item.meeting_id, document_id: item.document_id, source_key: item.source_key }));\nreturn [{ json: { status: 'ok', query: request.query, collection: request.collection, source_keys: request.source_keys, results, citations, retrieval: { candidate_limit: request.candidate_limit, candidates_received: points.length, relevance_floor: Number(relevanceFloor.toFixed(4)), returned_documents: results.length, max_returned_documents: request.top_k, strategy: 'adaptive_score_threshold' }, bootstrap: { required: false }, message: results.length ? `Found ${results.length} relevant Open Besluitvorming documents from ${points.length} candidates.` : 'No sufficiently relevant Open Besluitvorming documents were found.' } }];"
+        },
+        "id": "ori-search-format-response",
+        "name": "9. Build Search Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          120
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.date_only }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "ori-search-date-only",
+        "name": "6. Date-Only Request?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          0,
+          20
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.enabled }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "ori-search-enabled",
+        "name": "3. Open Besluitvorming Ingeschakeld?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -720,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { status: 'disabled', results: [], citations: [], message: 'Zoeken in Open Besluitvorming is uitgeschakeld voor deze omgeving.' } }];"
+        },
+        "id": "ori-search-disabled-response",
+        "name": "3a. Retourneer Uitgeschakeld",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -480,
+          -120
+        ]
+      }
+    ],
+    "connections": {
+      "1. Receive Search Request": {
+        "main": [
+          [
+            {
+              "node": "2. Validate Search Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "2. Validate Search Request": {
+        "main": [
+          [
+            {
+              "node": "3. Open Besluitvorming Ingeschakeld?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "3. Inspect Retrieval Collection": {
+        "main": [
+          [
+            {
+              "node": "4. Determine Bootstrap State",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "4. Determine Bootstrap State": {
+        "main": [
+          [
+            {
+              "node": "5. Default Artifact Required?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "5. Default Artifact Required?": {
+        "main": [
+          [
+            {
+              "node": "6a. Return Bootstrap Instruction",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "6. Date-Only Request?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "6b. Embed Search Query": {
+        "main": [
+          [
+            {
+              "node": "7. Build Filtered Vector Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "7. Build Filtered Vector Query": {
+        "main": [
+          [
+            {
+              "node": "8. Search Open Besluitvorming",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "8. Search Open Besluitvorming": {
+        "main": [
+          [
+            {
+              "node": "9. Build Search Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "6. Date-Only Request?": {
+        "main": [
+          [
+            {
+              "node": "7. Build Filtered Vector Query",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "6b. Embed Search Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "3. Open Besluitvorming Ingeschakeld?": {
+        "main": [
+          [
+            {
+              "node": "3. Inspect Retrieval Collection",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "3a. Retourneer Uitgeschakeld",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "tags": []
+  }
+]
