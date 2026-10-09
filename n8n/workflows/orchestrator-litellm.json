@@ -44,7 +44,7 @@
           "text": "={{ (() => { if (typeof $json.precomputed_response === 'string' && $json.precomputed_response.trim()) { return '[FINAL_ANSWER]\\n' + $json.precomputed_response.trim(); } const msgs = Array.isArray($json.body?.messages) ? $json.body.messages : (Array.isArray($json.messages) ? $json.messages : []); if (msgs.length) { return msgs.map((m) => { const role = String(m?.role || 'user'); const content = Array.isArray(m?.content) ? m.content.map((part) => { if (!part) return ''; if (typeof part === 'string') return part; const t = String(part.type || '').toLowerCase(); if (t === 'text' || t === 'input_text') return String(part.text || part.content || ''); return ''; }).filter(Boolean).join(' ') : (typeof m?.content === 'string' ? m.content : ''); return `[${role}] ${String(content || '').trim()}`.trim(); }).filter(Boolean).join('\\n'); } return String($json.body?.text || $json.text || $json.body?.prompt || $json.prompt || $json.body?.input || $json.input || ''); })() }}",
           "hasOutputParser": false,
           "options": {
-            "systemMessage": "={{ (() => { const body = ($json && $json.body && typeof $json.body === 'object') ? $json.body : {}; const userName = (typeof body.userName === 'string' ? body.userName.trim() : ''); const userEmail = (typeof body.userEmail === 'string' ? body.userEmail.trim() : ''); const base = 'Je bent de GovChat Orchestrator voor overheidscommunicatie. Gebruik de beschikbare tool wanneer de gebruiker vraagt om versimpelen naar B1 (of vergelijkbare verzoeken zoals vereenvoudigen/herformuleren op taalniveau). Gebruik de afbeelding-tool wanneer de gebruiker expliciet vraagt om een afbeelding/generatie van beeldmateriaal. Gebruik voor overige vragen je eigen redeneervermogen en geef een direct antwoord. Houd antwoorden feitelijk en voeg geen ongefundeerde informatie toe. Als de afbeelding-tool output markdown bevat (bijv. ![...](...)), geef exact die markdown terug als eindantwoord zonder extra tekst. Als de input begint met [FINAL_ANSWER], geef exact alles ná dit label terug als eindantwoord zonder extra tekst.'; const context = []; if (userName) context.push('naam: ' + userName); if (userEmail) context.push('e-mailadres: ' + userEmail); if (!context.length) return base; return base + ' Context huidige gebruiker: ' + context.join(', ') + '. Gebruik deze context alleen wanneer relevant voor het antwoord en noem persoonsgegevens alleen als dat functioneel nodig is.'; })() }}",
+            "systemMessage": "={{ (() => { const body = ($json && $json.body && typeof $json.body === 'object') ? $json.body : {}; const userName = (typeof body.userName === 'string' ? body.userName.trim() : ''); const userEmail = (typeof body.userEmail === 'string' ? body.userEmail.trim() : ''); const base = 'Je bent de GovChat Orchestrator voor overheidscommunicatie. Gebruik de beschikbare tool wanneer de gebruiker vraagt om versimpelen naar B1 (of vergelijkbare verzoeken zoals vereenvoudigen/herformuleren op taalniveau). Gebruik de afbeelding-tool wanneer de gebruiker expliciet vraagt om een afbeelding/generatie van beeldmateriaal. Gebruik voor overige vragen je eigen redeneervermogen en geef een direct antwoord. Houd antwoorden feitelijk en voeg geen ongefundeerde informatie toe. Als de afbeelding-tool output markdown bevat (bijv. ![...](...)), geef exact die markdown terug als eindantwoord zonder extra tekst. Als de input begint met [FINAL_ANSWER], geef exact alles n\u00e1 dit label terug als eindantwoord zonder extra tekst.'; const context = []; if (userName) context.push('naam: ' + userName); if (userEmail) context.push('e-mailadres: ' + userEmail); if (!context.length) return base; return base + ' Context huidige gebruiker: ' + context.join(', ') + '. Gebruik deze context alleen wanneer relevant voor het antwoord en noem persoonsgegevens alleen als dat functioneel nodig is.'; })() }} Als N8N_ENABLE_OPENBESLUITVORMING=false is, gebruik je Open Besluitvorming niet en leg je kort uit dat deze bron in deze omgeving is uitgeschakeld. Gebruik de tool zoeken_in_openbesluitvorming standaard voor vragen over openbare besluitvorming, vergaderstukken, agenda\u2019s, besluiten en documenten.  Bij Open Besluitvorming is Provincie Limburg de standaardorganisatie wanneer de gebruiker geen organisatie noemt. Wanneer de gebruiker expliciet een andere provincie, gemeente of organisatie noemt, geef de bijbehorende source_key mee aan de zoektool; vraag om verduidelijking als de organisatie niet eenduidig is. Gebruik uitsluitend het resultaat van die tool als feitelijke bron en vermeld relevante bronverwijzingen als compacte Markdown-links, nooit als kale lange URLs. Gebruik de teruggegeven public_url uitsluitend als linkdoel en schrijf bijvoorbeeld [Bron: titel van document (datum)](public_url) of, als de titel ontbreekt, [Openbaar document (datum)](public_url). Presenteer gebeurtenissen, besluiten en documenten standaard chronologisch van oud naar nieuw wanneer dat inhoudelijk relevant is; vermeld bij ontbrekende of onzekere datums dat expliciet. Voeg bij ieder antwoord dat op deze zoektool steunt een korte, begrijpelijke dekkingstekst toe: 'Ik heb de beschikbare ge\u00efndexeerde openbare documenten zo breed mogelijk doorzocht. Toch kunnen documenten ontbreken, bijvoorbeeld door vertraging in publicatie, indexering of zoektermen.' Zeg nooit dat de uitkomst volledig, uitputtend of gegarandeerd is. Wanneer de tool bootstrap_required teruggeeft, leg kort uit dat de standaarddataset nog wordt voorbereid en verzin geen bronnen. Grenzen van Open Besluitvorming: gebruik zoeken_in_openbesluitvorming alleen voor gerichte openbare documentvragen. Een onderwerp is verplicht, behalve bij een zuivere datumselectie zonder onderwerp: de tool mag dan alle documenten teruggeven als de selectie maximaal 100 documenten bevat. Geeft de tool status topic_required terug, zeg dan dat de datumselectie te veel documenten bevat om zonder onderwerp betrouwbaar te analyseren en vraag om een onderwerp of kleinere periode; verzin geen analyse. Zeg nooit dat er geen besluit of document bestond op basis van nul zoekresultaten; zeg alleen dat er geen passend ge\u00efndexeerd document is gevonden en noem mogelijke dekking-, indexerings- of terminologiebeperkingen. Weiger claims van volledige inventarisatie, uitputtende tijdlijnen, betrouwbare totaaltellingen/statistieken, of vergelijkingen tussen organisaties wanneer brondekking niet is aangetoond; bied een afgebakende zoekvraag, export/analytics-workflow of broncontrole aan. Vraag bij ambigue entiteiten of afkortingen eerst wat bedoeld wordt en vraag ook of de gebruiker in Open Besluitvorming wil zoeken. Behandel gevonden documenten niet als bewijs van de actuele juridische status; verwijs daarvoor naar de bevoegde instantie of het actuele offici\u00eble register. Zeg duidelijk dat je geen toegang hebt tot private, verwijderde of niet-openbare documenten. Bij brede claims zoals alle tegenstrijdigheden in alle documenten bied je een begrensde beoordeling op onderwerp, periode, organisatie of documenttype aan. Bij een chronologisch antwoord noem je gevonden jaren \u00e9n ongedekte/missende perioden expliciet, zonder te suggereren dat daar niets is gebeurd.",
             "enableStreaming": true,
             "maxIterations": 8
           }
@@ -117,6 +117,137 @@
           -340,
           340
         ]
+      },
+      {
+        "parameters": {
+          "description": "={{ String($env.N8N_ENABLE_OPENBESLUITVORMING || 'true').trim().toLowerCase() === 'false' ? 'Open Besluitvorming zoeken is uitgeschakeld voor deze omgeving. Gebruik deze tool niet.' : 'Doorzoek openbare Open Besluitvorming-entiteiten. Vul ieder filter in het eigen veld in; zet filters nooit in query. query: een kort inhoudelijk onderwerp of trefwoorden; voor een datumoverzicht zonder onderwerp mogen alleen date_from/date_to gebruikt worden. source_key: Open Besluitvorming-bronsleutel van de organisatie; laat leeg voor de standaardbron(nen) uit OPENBESLUITVORMING_DEFAULT_SOURCES, standaard provincie_limburg. date_from/date_to: inclusieve datum in YYYY-MM-DD. document_type is het entiteittype document, meeting, motion of recording; leeg betekent document, de huidige standaard en enige inhoudelijk ge\u00efndexeerde entiteit. document_classification is een afzonderlijke filter op documentmetadata en ondersteunt onder meer Moties, Amendementen, Bijlage, Ingekomen stukken, Schriftelijke vragen van Statenleden en Uitnodigingen. Gebruik document_classification wanneer expliciet om die documentcategorie wordt gevraagd, bijvoorbeeld Moties; combineer bij veel resultaten met datum en/of onderwerp. supplier: bronplatform zoals ibabs of notubiz. meeting_id/document_id: alleen bekende exacte UUIDs. include_content=false retourneert alleen metadata, een kort fragment en de bronlink; include_content=true voegt ook de opgeslagen documentinhoud toe wanneer inhoudelijke analyse nodig is. De service onderzoekt vast 500 kandidaten en retourneert maximaal 100 documenten boven een adaptieve relevantiedrempel. Gebruik geen onzeker filter, want dat kan relevante documenten uitsluiten. Citeer public_url als compacte Markdown-link.' }}",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "value": "govchat-ob-search",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/govchat-ob-search",
+            "cachedResultName": "Open Besluitvorming - Zoeken"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "include_content": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('include_content', 'Kies false voor alleen documentmetadata: titel, datum, organisatie, stuksoort, IDs, score, fragment en bronlink. Kies true wanneer de agent de opgeslagen documentinhoud moet ontvangen om de inhoudelijke vraag te beantwoorden. True maakt de tooluitvoer groter; gebruik het alleen wanneer metadata en het korte fragment onvoldoende zijn.', 'boolean') }}",
+              "query": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('query', 'Kort inhoudelijk onderwerp of trefwoorden. Laat leeg uitsluitend voor een datumoverzicht met date_from en/of date_to.', 'string') }}",
+              "source_key": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('source_key', 'Exacte Open Besluitvorming-bronsleutel van de gevraagde organisatie. Laat leeg voor de standaardbron(nen), standaard provincie_limburg.', 'string') }}",
+              "date_from": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('date_from', 'Inclusieve begindatum in YYYY-MM-DD. Laat leeg als geen ondergrens is gevraagd.', 'string') }}",
+              "date_to": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('date_to', 'Inclusieve einddatum in YYYY-MM-DD. Laat leeg als geen bovengrens is gevraagd.', 'string') }}",
+              "document_type": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('document_type', 'Entiteittype in Open Besluitvorming: document, meeting, motion of recording. Laat leeg voor de standaardwaarde document. In de huidige vectorcollectie is alleen document ge\u00efndexeerd; gebruik meeting, motion of recording pas wanneer deze entiteiten in een toekomstige ingestie beschikbaar zijn.', 'string') }}",
+              "supplier": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('supplier', 'Exact bronplatform, bijvoorbeeld ibabs of notubiz. Laat leeg als niet expliciet gevraagd.', 'string') }}",
+              "meeting_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('meeting_id', 'Exacte vergadering-UUID. Alleen invullen wanneer met zekerheid bekend.', 'string') }}",
+              "document_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('document_id', 'Exacte document-UUID. Alleen invullen wanneer met zekerheid bekend.', 'string') }}",
+              "document_classification": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('document_classification', 'Documentclassificatie in de huidige database, bijvoorbeeld Moties, Amendementen, Bijlage, Ingekomen stukken, Schriftelijke vragen van Statenleden of Uitnodigingen. Gebruik deze parameter wanneer de gebruiker expliciet om een van deze stukcategorie\u00ebn vraagt. Laat leeg als geen classificatie is gevraagd.', 'string') }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "query",
+                "displayName": "query",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_key",
+                "displayName": "source_key",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "date_from",
+                "displayName": "date_from",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "date_to",
+                "displayName": "date_to",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "document_type",
+                "displayName": "document_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "document_classification",
+                "displayName": "document_classification",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "supplier",
+                "displayName": "supplier",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "meeting_id",
+                "displayName": "meeting_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "document_id",
+                "displayName": "document_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "include_content",
+                "displayName": "include_content",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "boolean"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          }
+        },
+        "id": "ToolOpenBesluitvormingSearch",
+        "name": "zoeken_in_openbesluitvorming",
+        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+        "typeVersion": 2.2,
+        "position": [
+          -340,
+          210
+        ]
       }
     ],
     "connections": {
@@ -178,6 +309,17 @@
       "AI Agent Orchestrator": {
         "main": [
           []
+        ]
+      },
+      "zoeken_in_openbesluitvorming": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent Orchestrator",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
         ]
       }
     },
