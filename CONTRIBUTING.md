@@ -59,5 +59,5 @@ Workflow-`id` is de unieke technische sleutel van een n8n-workflow.
 
 ## Opmerking voor lokaal testen
 
-`GovChat-NL-LibreChat` haalt deze workflowbestanden tijdens bootstrap op via GitHub Raw URLs. Na merge: herstart `n8n-bootstrap` in de LibreChat-stack om updates opnieuw te importeren/publiceren.
+De GovChat-NL-hoofdstack haalt deze workflowbestanden tijdens bootstrap op via GitHub Raw URLs. Na merge: herstart `n8n-bootstrap` in de LibreChat-stack om updates opnieuw te importeren/publiceren.
 

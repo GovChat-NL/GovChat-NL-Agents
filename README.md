@@ -30,14 +30,14 @@ n8n/
 
 ## Runtime-integratie
 
-`GovChat-NL-LibreChat` importeert workflows bij opstart via GitHub Raw URLs:
+De huidige GovChat-NL-hoofdstack importeert workflows bij opstart via GitHub Raw URLs:
 
 - Env var `AGENTS_RAW_BASE_URL`: basis-URL (default: `https://raw.githubusercontent.com/GovChat-NL/GovChat-NL-Agents/main/n8n/workflows`)
 - Env var `AGENTS_WORKFLOW_FILES`: bestandenlijst (default: `versimpelaar-litellm.json,orchestrator-litellm.json`)
 
 Hierdoor kan de LibreChat-stack starten **zonder** lokale clone van deze repository.
 
-Deze variabelen configureer je in [`GovChat-NL-LibreChat/.env`](../GovChat-NL-LibreChat/.env.example:49) en ze worden gebruikt door [`n8n-bootstrap`](../GovChat-NL-LibreChat/docker-compose.yml:415).
+Deze variabelen configureer je in [`.env.example`](https://github.com/GovChat-NL/GovChat-NL/blob/main/.env.example) en ze worden gebruikt door [`n8n-bootstrap`](https://github.com/GovChat-NL/GovChat-NL/blob/main/n8n/bootstrap.js).
 
 ## Hoe de orchestrator-keten werkt
 
@@ -64,7 +64,7 @@ In beide workflows (orchestrator + sub-agents) gebruikt de `OpenAI Chat Model` n
 
 LiteLLM verzorgt vervolgens modelrouting/providerkoppeling (bijv. OpenAI/Azure/Open-source backend) zonder dat de workflow zelf hoeft te veranderen.
 
-Als je de compose-opzet van [`GovChat-NL-LibreChat/docker-compose.yml`](../GovChat-NL-LibreChat/docker-compose.yml:394) volgt, wordt de n8n credential voor LiteLLM automatisch aangemaakt door `n8n-bootstrap` (credentialnaam: `LiteLLM API`) en daarna aan de geïmporteerde workflows gekoppeld.
+In [`docker-compose.yml`](https://github.com/GovChat-NL/GovChat-NL/blob/main/docker-compose.yml) van de GovChat-NL-hoofdstack wordt de n8n credential voor LiteLLM automatisch aangemaakt door `n8n-bootstrap` (credentialnaam: `LiteLLM API`) en daarna aan de geïmporteerde workflows gekoppeld.
 
 ## Naamconventie voor workflows
 
